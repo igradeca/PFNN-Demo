@@ -2,6 +2,8 @@
 
 Demonstration made in Unity for NN created for character control animations.
 
+The video of demonstration can be seen on following link: https://www.youtube.com/watch?v=mBHTCtaOzzc
+
 Goal of this project is to recreate novel type of functional Neural Network (NN) with Phase-Function which will be able to learn from its dataset and then use it in practical solution. Reason for building the NN is to teach it to create animations of walking, running, jumping, crouching and climbing movements. Also these animations could produce combinations and adaptations to each other according to player inputs in real time. Main advantage of this NN will be that it is useable in real time and it will consume small amount of computer RAM memory.
 
 To play this demonstration user needs to have Xbox360 controller. Character can walk and jog depending on left stick direction amount and with combination of right trigger to jog. Also if user has pressed button B character can crouch. If left trigger button is pressed character facing direction will be the same as camera direction and movement direction is controlled with left stick.
