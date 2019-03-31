@@ -212,7 +212,7 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
 
     public void UpdateStrafe(float leftTrigger) {
 
-        strafeTarget = (leftTrigger + 1.0f) / 2.0f;
+        strafeTarget = leftTrigger;
         strafeAmount = Mathf.Lerp(strafeAmount, strafeTarget, Utils.extraStrafeSmooth);
     }
 
@@ -222,19 +222,15 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
             (Mathf.Atan2(newTargetDirection.x, newTargetDirection.z) * Mathf.Rad2Deg),
             Vector3.up);//new Vector3(0.0f, 1.0f, 0.0f)
         
-        float movementSpeed = 2.5f + 2.5f * (rightTrigger + 1.0f);
+        float movementSpeed = 2.5f + 2.5f * rightTrigger;
 
         Vector3 newTargetVelocity = movementSpeed * (newTargetRotation * (new Vector3(axisX, 0.0f, axisY)));
         targetVelocity = Vector3.Lerp(targetVelocity, newTargetVelocity, Utils.extraVelocitySmooth);
         
         Vector3 targetVelocityDirection = targetVelocity.magnitude < 1e-05 ? targetDirection : targetVelocity.normalized;
 
-        if (strafeAmount == 0.5f) {
-            targetDirection = Utils.MixDirections(targetDirection, targetVelocityDirection, Utils.extraDirectionSmooth);
-        } else {            
-            newTargetDirection = Utils.MixDirections(targetVelocityDirection, newTargetDirection, strafeAmount);
-            targetDirection = Utils.MixDirections(targetDirection, newTargetDirection, Utils.extraDirectionSmooth);
-        }
+        newTargetDirection = Utils.MixDirections(targetVelocityDirection, newTargetDirection, strafeAmount);
+        targetDirection = Utils.MixDirections(targetDirection, newTargetDirection, Utils.extraDirectionSmooth);
 
         crouchedAmount = Mathf.Lerp(crouchedAmount, crouchedTarget, Utils.extraCrouchedSmooth);
 
