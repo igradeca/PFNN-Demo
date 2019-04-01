@@ -356,7 +356,7 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour
     public void UpdateStrafe(float leftTrigger)
     {
 
-        strafeTarget = (leftTrigger + 1.0f) / 2.0f;
+        strafeTarget = leftTrigger;
         strafeAmount = Mathf.Lerp(strafeAmount, strafeTarget, Utils.extraStrafeSmooth);
     }
 
@@ -368,6 +368,7 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour
             Vector3.up);//new Vector3(0.0f, 1.0f, 0.0f)
 
         float movementSpeed = 2.5f + 2.5f * (rightTrigger + 1.0f);
+        
 
         Vector3 newTargetVelocity = movementSpeed * (newTargetRotation * (new Vector3(axisX, 0.0f, axisY)));
         targetVelocity = Vector3.Lerp(targetVelocity, newTargetVelocity, Utils.extraVelocitySmooth);
