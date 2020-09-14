@@ -1,3 +1,8 @@
+DaveDub addition: Added simple FBX character. Character is driven by (global) rotation values coming out of PFNN. 
+Todo: 
+    Convert rotations to local rotations
+    Apply local rotations to avatar for easy transfer to arbitory FBX character (i.e. use Unity's Mechanim system)
+
 # Unity Demonstration for Phase-Function Neural Network for Character Control
 
 Demonstration made in Unity for NN created for character control animations.

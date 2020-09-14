@@ -3,8 +3,59 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
-    
+// Use to enable xform and global xform
+/*
+public static class Matrix3x3
+{
+    // From: https://answers.unity.com/questions/875348/generate-a-3x3-rotation-matrix-from-a-matrix4x4.html
+
+    private static float[][] identityMatrix =
+    {
+             new [] {1.0f, 0.0f, 0.0f},
+             new [] {0.0f, 1.0f, 0.0f},
+             new [] {0.0f, 0.0f, 1.0f}
+        };
+
+    public static float[][] QuaternionTo3x3(this Quaternion value)
+    {
+        float[][] matrix3x3 =
+        {
+             new float[3],
+             new float[3],
+             new float[3],
+         };
+
+        float[][] symetricalMatrix =
+        {
+             new float[3] {(-(value.y * value.y) - (value.z * value.z)), value.x * value.y,                                       value.x * value.z},
+             new float[3] {value.x * value.y, (-(value.x * value.x) - (value.z * value.z)), value.y * value.z},
+             new float[3] {value.x * value.z, value.y * value.z, (-(value.x * value.x) - (value.y * value.y))}
+         };
+
+        float[][] antiSymetricalMatrix =
+        {
+             new[] {0.0f, -value.z, value.y},
+             new []{value.z, 0.0f, -value.x},
+             new []{-value.y, value.x, 0.0f}
+         };
+
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                matrix3x3[i][j] = identityMatrix[i][j] +
+                          (2.0f * symetricalMatrix[i][j]) +
+                          (2.0f * value.w * antiSymetricalMatrix[i][j]);
+            }
+        }
+        return matrix3x3;
+    }
+}
+*/
+
+public class CharacterTrajectoryAndAnimScript : MonoBehaviour
+{
+
     private Transform characterBody;
     private Transform trajectoryPath;
 
@@ -15,19 +66,22 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
     // Character Joints stuff 
     [Header("Joints")]
     public int jointsNumber = 31;
-    
+
     public float strafeAmount;
     public float strafeTarget;
     public float crouchedAmount;
     public float crouchedTarget;
     public float responsive;
 
-    public struct JointsComponents {
+    public struct JointsComponents
+    {
         public Vector3 position;
         public Vector3 velocity;
         public Quaternion rotation;
-
+        //public Matrix4x4 globalXForm;  // Use to enable xform and global xform
+        //public Matrix4x4 xForm;        // Use to enable xform and global xform
         public GameObject jointPoint;
+        public string jointName;
     }
     public JointsComponents[] joints;
 
@@ -48,9 +102,10 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
     public float heightOrigin;
 
     private Vector3 targetDirection;
-    private Vector3 targetVelocity;    
+    private Vector3 targetVelocity;
 
-    public struct TrajectoryComponents {
+    public struct TrajectoryComponents
+    {
         public Vector3 position;
         public Quaternion rotation;
         public Vector3 direction;
@@ -71,8 +126,83 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
     public float wallWidth = 1.5f;
     public float wallVal = 1.1f;
 
+    [Header("Mirrored Character")]
+    public GameObject Hips;
+
+    private Transform[] ImportedJoints;
+
+    // CMU skeleton joint naming convention
+    private string[] JointNames = new string[] {
+        "Hips",
+        "RHipJoint",
+        "RightUpLeg",
+        "RightLeg",
+        "RightFoot",
+        "RightToeBase",
+        "LHipJoint",
+        "LeftUpLeg",
+        "LeftLeg",
+        "LeftFoot",
+        "LeftToeBase",
+        "LowerBack",
+        "Spine",
+        "Spine1",
+        "Neck",
+        "Neck1",
+        "Head",
+        "RightShoulder",
+        "RightArm",
+        "RightForeArm",
+        "RightHand",
+        "RightFingerBase",
+        "RThumb",
+        "LeftHandIndex1",
+        "LeftShoulder",
+        "LeftArm",
+        "LeftForeArm",
+        "LeftHand",
+        "LeftFingerBase",
+        "LThumb",
+        "RightHandIndex1"
+    };
+    private int[] JointParents = new int[] {
+        -1, // Hips 0
+        0,  // RHip 1
+        1,  // RThigh 2
+        2,  // RShin 3
+        3,  // RAnkle 4
+        4,  // RToes 5
+        0,  // LHip 6
+        6,  // LThigh 7
+        7,  // LShin 8
+        8,  // LAnkle 9
+        9,  // LToes 10
+        0,  // Spine 11
+        11, // Spine1 12
+        12, // Spine2 13
+        13, // Neck 14
+        14, // Head 15
+        15, // HeadTop 16
+        12, // RCollar 17
+        17, // RArm 18
+        18, // RForearm 19
+        19, // RWrist 20
+        20, // RHand 21
+        21, // RFingers 22
+        22, // RWrist2 23
+        12, // LCollar 24
+        24, // LArm 25
+        25, // LForearm 26
+        26, // LWrist 27
+        27, // RHand 28
+        28, // RFingers 29
+        29, // RWrist2 30
+    };
+
+
     // Use this for initialization
-    void Start () {
+    void Start()
+    {
 
         GetAllWalls();
 
@@ -86,20 +216,25 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
         layerMask = ~layerMask;
 
         oppositeScaleFactor = 1 / scaleFactor;
+
+        ImportedJoints = Hips.GetComponentsInChildren<Transform>();
     }
 
-    private void GetAllWalls() {
+    private void GetAllWalls()
+    {
 
         Transform terrainWalls = GameObject.Find("TerrainWalls").transform;
         this.terrainWalls = new Utils.WallPoints[terrainWalls.childCount];
         //Debug.Log(TerrainWalls.Length);
 
-        for (int i = 0; i < terrainWalls.childCount; i++) {
+        for (int i = 0; i < terrainWalls.childCount; i++)
+        {
             this.terrainWalls[i] = terrainWalls.GetChild(i).GetComponent<WallScript>().GetWallPoints();
         }
     }
 
-    private void InitializeJoints() {
+    private void InitializeJoints()
+    {
 
         phase = 0.0f;
 
@@ -114,9 +249,11 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
         InstantiateJoints();
     }
 
-    private void InstantiateJoints() {
+    private void InstantiateJoints()
+    {
 
-        for (int i = 0; i < jointsNumber; i++) {
+        for (int i = 0; i < jointsNumber; i++)
+        {
             var newJoint = Instantiate(
                 jointPrefab,
                 new Vector3(
@@ -126,12 +263,13 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
                 Quaternion.identity,
                 characterBody);
             newJoint.name = "Joint_" + i;
-            
             joints[i].jointPoint = newJoint;
+            joints[i].jointName = JointNames[i];
         }
     }
 
-    private void InitializeTrajectory() {
+    private void InitializeTrajectory()
+    {
 
         trajectoryLength = numberOfTrajectoryProjections * 10;
         points = new TrajectoryComponents[trajectoryLength];
@@ -142,9 +280,11 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
         InstantiateTrajectoryPoints();
     }
 
-    private void InstantiateTrajectoryPoints() {
+    private void InstantiateTrajectoryPoints()
+    {
 
-        for (int i = 0; i < trajectoryLength; i += 10) {
+        for (int i = 0; i < trajectoryLength; i += 10)
+        {
             var newPoint = Instantiate(
                 framePointPrefab,
                 new Vector3(
@@ -159,7 +299,8 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
         }
     }
 
-    public void Reset(Vector3 initialPosition, Matrix Y) {
+    public void Reset(Vector3 initialPosition, Matrix Y)
+    {
 
         Vector3 rootPosition = new Vector3(
             initialPosition.x,
@@ -167,7 +308,8 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
             initialPosition.z);
         Quaternion rootRotation = new Quaternion();
 
-        for (int i = 0; i < jointsNumber; i++) {
+        for (int i = 0; i < jointsNumber; i++)
+        {
             int oPosition = 8 + (((trajectoryLength / 2) / 10) * 4) + (jointsNumber * 3 * 0);
             int oVelocity = 8 + (((trajectoryLength / 2) / 10) * 4) + (jointsNumber * 3 * 1);
             int oRotation = 8 + (((trajectoryLength / 2) / 10) * 4) + (jointsNumber * 3 * 2);
@@ -194,7 +336,8 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
             joints[i].rotation = rotation;
         }
 
-        for (int i = 0; i < trajectoryLength; i++) {
+        for (int i = 0; i < trajectoryLength; i++)
+        {
             points[i].position = rootPosition;
             points[i].rotation = rootRotation;
             points[i].direction = Vector3.forward;//new Vector3(0.0f, 0.0f, 1.0f);
@@ -210,27 +353,37 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
         phase = 0.0f;
     }
 
-    public void UpdateStrafe(float leftTrigger) {
+    public void UpdateStrafe(float leftTrigger)
+    {
 
         strafeTarget = leftTrigger;
         strafeAmount = Mathf.Lerp(strafeAmount, strafeTarget, Utils.extraStrafeSmooth);
     }
 
-    public void UpdateTargetDirectionAndVelocity(Vector3 newTargetDirection, float axisX, float axisY, float rightTrigger) {
+    public void UpdateTargetDirectionAndVelocity(Vector3 newTargetDirection, float axisX, float axisY, float rightTrigger)
+    {
 
         Quaternion newTargetRotation = Quaternion.AngleAxis(
             (Mathf.Atan2(newTargetDirection.x, newTargetDirection.z) * Mathf.Rad2Deg),
             Vector3.up);//new Vector3(0.0f, 1.0f, 0.0f)
+
+        float movementSpeed = 2.5f + 2.5f * (rightTrigger + 1.0f);
         
-        float movementSpeed = 2.5f + 2.5f * rightTrigger;
 
         Vector3 newTargetVelocity = movementSpeed * (newTargetRotation * (new Vector3(axisX, 0.0f, axisY)));
         targetVelocity = Vector3.Lerp(targetVelocity, newTargetVelocity, Utils.extraVelocitySmooth);
-        
+
         Vector3 targetVelocityDirection = targetVelocity.magnitude < 1e-05 ? targetDirection : targetVelocity.normalized;
 
-        newTargetDirection = Utils.MixDirections(targetVelocityDirection, newTargetDirection, strafeAmount);
-        targetDirection = Utils.MixDirections(targetDirection, newTargetDirection, Utils.extraDirectionSmooth);
+        if (strafeAmount == 0.5f)
+        {
+            targetDirection = Utils.MixDirections(targetDirection, targetVelocityDirection, Utils.extraDirectionSmooth);
+        }
+        else
+        {
+            newTargetDirection = Utils.MixDirections(targetVelocityDirection, newTargetDirection, strafeAmount);
+            targetDirection = Utils.MixDirections(targetDirection, newTargetDirection, Utils.extraDirectionSmooth);
+        }
 
         crouchedAmount = Mathf.Lerp(crouchedAmount, crouchedTarget, Utils.extraCrouchedSmooth);
 
@@ -238,50 +391,60 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
         Debug.DrawRay(this.transform.position, targetVelocityDirection * 10, Color.green);
     }
 
-    public void UpdateGait(float rightTrigger) {
+    public void UpdateGait(float rightTrigger)
+    {
 
-        if (targetVelocity.magnitude < 0.1f) { // Standing still
+        if (targetVelocity.magnitude < 0.1f)
+        { // Standing still
             float standAmount = 1.0f - Mathf.Clamp01(targetVelocity.magnitude / 0.1f);
-            
-            points[trajectoryLength / 2].gaitStand  = Mathf.Lerp(points[trajectoryLength / 2].gaitStand, standAmount, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitWalk   = Mathf.Lerp(points[trajectoryLength / 2].gaitWalk, 0.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitJog    = Mathf.Lerp(points[trajectoryLength / 2].gaitJog, 0.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitCrouch = Mathf.Lerp(points[trajectoryLength / 2].gaitCrouch, 0.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitJump   = Mathf.Lerp(points[trajectoryLength / 2].gaitJump, 0.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitBump   = Mathf.Lerp(points[trajectoryLength / 2].gaitBump, 0.0f, Utils.extraGaitSmooth);
 
-        } else if (crouchedAmount > 0.1f) { // Crouch
-            points[trajectoryLength / 2].gaitStand  = Mathf.Lerp(points[trajectoryLength / 2].gaitStand, 0.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitWalk   = Mathf.Lerp(points[trajectoryLength / 2].gaitWalk, 0.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitJog    = Mathf.Lerp(points[trajectoryLength / 2].gaitJog, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitStand = Mathf.Lerp(points[trajectoryLength / 2].gaitStand, standAmount, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitWalk = Mathf.Lerp(points[trajectoryLength / 2].gaitWalk, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitJog = Mathf.Lerp(points[trajectoryLength / 2].gaitJog, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitCrouch = Mathf.Lerp(points[trajectoryLength / 2].gaitCrouch, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitJump = Mathf.Lerp(points[trajectoryLength / 2].gaitJump, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitBump = Mathf.Lerp(points[trajectoryLength / 2].gaitBump, 0.0f, Utils.extraGaitSmooth);
+
+        }
+        else if (crouchedAmount > 0.1f)
+        { // Crouch
+            points[trajectoryLength / 2].gaitStand = Mathf.Lerp(points[trajectoryLength / 2].gaitStand, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitWalk = Mathf.Lerp(points[trajectoryLength / 2].gaitWalk, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitJog = Mathf.Lerp(points[trajectoryLength / 2].gaitJog, 0.0f, Utils.extraGaitSmooth);
             points[trajectoryLength / 2].gaitCrouch = Mathf.Lerp(points[trajectoryLength / 2].gaitCrouch, crouchedAmount, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitJump   = Mathf.Lerp(points[trajectoryLength / 2].gaitJump, 0.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitBump   = Mathf.Lerp(points[trajectoryLength / 2].gaitBump, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitJump = Mathf.Lerp(points[trajectoryLength / 2].gaitJump, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitBump = Mathf.Lerp(points[trajectoryLength / 2].gaitBump, 0.0f, Utils.extraGaitSmooth);
 
-        } else if (rightTrigger != 0.0f) { // Jog - 546 wuuuut??
-            points[trajectoryLength / 2].gaitStand  = Mathf.Lerp(points[trajectoryLength / 2].gaitStand, 0.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitWalk   = Mathf.Lerp(points[trajectoryLength / 2].gaitWalk, 0.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitJog    = Mathf.Lerp(points[trajectoryLength / 2].gaitJog, 1.0f, Utils.extraGaitSmooth);
+        }
+        else if (rightTrigger != 0.0f)
+        { // Jog - 546 wuuuut??
+            points[trajectoryLength / 2].gaitStand = Mathf.Lerp(points[trajectoryLength / 2].gaitStand, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitWalk = Mathf.Lerp(points[trajectoryLength / 2].gaitWalk, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitJog = Mathf.Lerp(points[trajectoryLength / 2].gaitJog, 1.0f, Utils.extraGaitSmooth);
             points[trajectoryLength / 2].gaitCrouch = Mathf.Lerp(points[trajectoryLength / 2].gaitCrouch, 0.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitJump   = Mathf.Lerp(points[trajectoryLength / 2].gaitJump, 0.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitBump   = Mathf.Lerp(points[trajectoryLength / 2].gaitBump, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitJump = Mathf.Lerp(points[trajectoryLength / 2].gaitJump, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitBump = Mathf.Lerp(points[trajectoryLength / 2].gaitBump, 0.0f, Utils.extraGaitSmooth);
 
-        } else { // Walk
-            points[trajectoryLength / 2].gaitStand  = Mathf.Lerp(points[trajectoryLength / 2].gaitStand, 0.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitWalk   = Mathf.Lerp(points[trajectoryLength / 2].gaitWalk, 1.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitJog    = Mathf.Lerp(points[trajectoryLength / 2].gaitJog, 0.0f, Utils.extraGaitSmooth);
+        }
+        else
+        { // Walk
+            points[trajectoryLength / 2].gaitStand = Mathf.Lerp(points[trajectoryLength / 2].gaitStand, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitWalk = Mathf.Lerp(points[trajectoryLength / 2].gaitWalk, 1.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitJog = Mathf.Lerp(points[trajectoryLength / 2].gaitJog, 0.0f, Utils.extraGaitSmooth);
             points[trajectoryLength / 2].gaitCrouch = Mathf.Lerp(points[trajectoryLength / 2].gaitCrouch, 0.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitJump   = Mathf.Lerp(points[trajectoryLength / 2].gaitJump, 0.0f, Utils.extraGaitSmooth);
-            points[trajectoryLength / 2].gaitBump   = Mathf.Lerp(points[trajectoryLength / 2].gaitBump, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitJump = Mathf.Lerp(points[trajectoryLength / 2].gaitJump, 0.0f, Utils.extraGaitSmooth);
+            points[trajectoryLength / 2].gaitBump = Mathf.Lerp(points[trajectoryLength / 2].gaitBump, 0.0f, Utils.extraGaitSmooth);
         }
     }
 
-    public void PredictFutureTrajectory() {
+    public void PredictFutureTrajectory()
+    {
 
         Vector3[] positionsBlend = new Vector3[trajectoryLength];
         positionsBlend[trajectoryLength / 2] = points[trajectoryLength / 2].position;
 
-        for (int i = ((trajectoryLength / 2) + 1); i < trajectoryLength; i++) {
+        for (int i = ((trajectoryLength / 2) + 1); i < trajectoryLength; i++)
+        {
             float biasPosition = Mathf.Lerp(0.5f, 1.0f, strafeAmount);                                       // On both variables will come character response check (569)
             float biasDirection = Mathf.Lerp(2.0f, 0.5f, strafeAmount);
 
@@ -294,18 +457,21 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
                 scalePosition);
 
             // Collide with walls
-            for (int j = 0; j < terrainWalls.Length; j++) {
+            for (int j = 0; j < terrainWalls.Length; j++)
+            {
                 Vector2 trajectoryPoint = new Vector2(positionsBlend[i].x * scaleFactor, positionsBlend[i].z * scaleFactor);
 
                 if ((trajectoryPoint - ((terrainWalls[j].wallStart + terrainWalls[j].wallEnd) / 2.0f)).magnitude >
-                    (terrainWalls[j].wallStart - terrainWalls[j].wallEnd).magnitude) {
+                    (terrainWalls[j].wallStart - terrainWalls[j].wallEnd).magnitude)
+                {
                     continue;
                 }
 
                 Vector2 segmentPoint = Utils.SegmentNearest(terrainWalls[j].wallStart, terrainWalls[j].wallEnd, trajectoryPoint);
                 float segmentDistance = (segmentPoint - trajectoryPoint).magnitude;
 
-                if (segmentDistance < (wallWidth + wallVal)) {
+                if (segmentDistance < (wallWidth + wallVal))
+                {
                     Vector2 point0 = (wallWidth + 0.0f) * (trajectoryPoint - segmentPoint).normalized + segmentPoint;
                     Vector2 point1 = (wallWidth + wallVal) * (trajectoryPoint - segmentPoint).normalized + segmentPoint;
                     Vector2 point = Vector2.Lerp(point0, point1, Mathf.Clamp01(segmentDistance - wallWidth) / wallVal);
@@ -319,39 +485,45 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
 
             points[i].height = points[trajectoryLength / 2].height;
 
-            points[i].gaitStand  = points[trajectoryLength / 2].gaitStand;
-            points[i].gaitWalk   = points[trajectoryLength / 2].gaitWalk;
-            points[i].gaitJog    = points[trajectoryLength / 2].gaitJog;
+            points[i].gaitStand = points[trajectoryLength / 2].gaitStand;
+            points[i].gaitWalk = points[trajectoryLength / 2].gaitWalk;
+            points[i].gaitJog = points[trajectoryLength / 2].gaitJog;
             points[i].gaitCrouch = points[trajectoryLength / 2].gaitCrouch;
-            points[i].gaitJump   = points[trajectoryLength / 2].gaitJump;
-            points[i].gaitBump   = points[trajectoryLength / 2].gaitBump;
+            points[i].gaitJump = points[trajectoryLength / 2].gaitJump;
+            points[i].gaitBump = points[trajectoryLength / 2].gaitBump;
         }
 
-        for (int i = ((trajectoryLength / 2) + 1); i < trajectoryLength; i++) {
+        for (int i = ((trajectoryLength / 2) + 1); i < trajectoryLength; i++)
+        {
             points[i].position = positionsBlend[i];
         }
 
         // crouch stuff
-        
+
     }
 
-    public void Jumps() {
+    public void Jumps()
+    {
 
-        for (int i = ((trajectoryLength / 2) + 1); i < trajectoryLength; i++) {
+        for (int i = ((trajectoryLength / 2) + 1); i < trajectoryLength; i++)
+        {
             points[i].gaitJump = 0.0f;
 
             points[i].gaitJump = Mathf.Max(
                 points[i].gaitJump,
-                1.0f - Mathf.Clamp01( (3.0f / 5.0f))
+                1.0f - Mathf.Clamp01((3.0f / 5.0f))
                 );
         }
     }
 
-    public void Walls() {
+    public void Walls()
+    {
 
-        for (int i = 0; i < trajectoryLength; i++) {
+        for (int i = 0; i < trajectoryLength; i++)
+        {
             points[i].gaitBump = 0.0f;
-            for (int j = 0; j < terrainWalls.Length; j++) {
+            for (int j = 0; j < terrainWalls.Length; j++)
+            {
                 Vector2 trajectoryPoint = new Vector2(points[i].position.x * scaleFactor, points[i].position.z * scaleFactor);
                 Vector2 segmentPoint = Utils.SegmentNearest(terrainWalls[j].wallStart, terrainWalls[j].wallEnd, trajectoryPoint);
 
@@ -361,9 +533,11 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
         }
     }
 
-    public void UpdateRotation() {
+    public void UpdateRotation()
+    {
 
-        for (int i = 0; i < trajectoryLength; i++) {
+        for (int i = 0; i < trajectoryLength; i++)
+        {
             points[i].rotation = Quaternion.AngleAxis(
                 (Mathf.Atan2(points[i].direction.x, points[i].direction.z) * Mathf.Rad2Deg),
                 Vector3.up);
@@ -371,34 +545,58 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
         }
     }
 
-    public void UpdateHeights() {
+    public void UpdateHeights()
+    {
 
-        for (int i = (trajectoryLength / 2); i < trajectoryLength; i++) {
+        for (int i = (trajectoryLength / 2); i < trajectoryLength; i++)
+        {
             points[i].position.y = GetHeightSample(points[i].position);
         }
 
         points[trajectoryLength / 2].height = 0.0f;
-        for (int i = 0; i < trajectoryLength; i += 10) {
+        for (int i = 0; i < trajectoryLength; i += 10)
+        {
             points[trajectoryLength / 2].height += (points[i].position.y / (trajectoryLength / 10));
         }
     }
 
-    public float GetHeightSample(Vector3 position) {
-        
+    public float GetHeightSample(Vector3 position)
+    {
+
         RaycastHit hit;
-        position.Scale(new Vector3(scaleFactor, 0.0f, scaleFactor));    
+        position.Scale(new Vector3(scaleFactor, 0.0f, scaleFactor));
         position.y = heightOrigin;
 
-        if (Physics.Raycast(position, Vector3.down, out hit, Mathf.Infinity, layerMask)) {
-            if (hit.transform.tag == "Terrain") {
+        if (Physics.Raycast(position, Vector3.down, out hit, Mathf.Infinity, layerMask))
+        {
+            if (hit.transform.tag == "Terrain")
+            {
                 //Debug.DrawRay(position, Vector3.down, Color.blue);
                 return (heightOrigin - hit.distance) * oppositeScaleFactor;
-            }            
-        }        
+            }
+        }
         return 0.0f;
     }
 
-    public void UpdateNetworkInput(ref Matrix X) {
+    // Use to enable xform and global xform
+    /*
+    public void ForwardKinematics()
+    {
+        for (int i = 0; i < jointsNumber; i++)
+        {
+            joints[i].globalXForm = joints[i].xForm;
+            int j = JointParents[i];
+            while (j != -1)
+            {
+                joints[i].globalXForm = joints[j].xForm * joints[i].globalXForm;
+                j = JointParents[j];
+            }
+        }
+    }
+    */
+
+    public void UpdateNetworkInput(ref Matrix X)
+    {
 
         Vector3 rootPosition = new Vector3(
             points[trajectoryLength / 2].position.x,
@@ -410,7 +608,8 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
         int w = trajectoryLength / 10;
 
         // Trajectory position and direction
-        for (int i = 0; i < trajectoryLength; i += 10) {
+        for (int i = 0; i < trajectoryLength; i += 10)
+        {
             Vector3 position = Quaternion.Inverse(rootRotation) * (points[i].position - rootPosition);
             Vector3 direction = Quaternion.Inverse(rootRotation) * points[i].direction;
 
@@ -422,7 +621,8 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
         }
 
         // Trajectory gaits
-        for (int i = 0; i < trajectoryLength; i += 10) {
+        for (int i = 0; i < trajectoryLength; i += 10)
+        {
             X[(w * 4) + (i / 10)] = points[i].gaitStand;
             X[(w * 5) + (i / 10)] = points[i].gaitWalk;
             X[(w * 6) + (i / 10)] = points[i].gaitJog;
@@ -440,7 +640,8 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
         Quaternion previousRootRotation = points[(trajectoryLength / 2) - 1].rotation;
 
         int o = (trajectoryLength / 10) * 10;
-        for (int i = 0; i < jointsNumber; i++) {
+        for (int i = 0; i < jointsNumber; i++)
+        {
             Vector3 pos = Quaternion.Inverse(previousRootRotation) * (joints[i].position - previousRootPosition);
             Vector3 prv = Quaternion.Inverse(previousRootRotation) * joints[i].velocity;
 
@@ -450,14 +651,15 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
 
             X[o + (jointsNumber * 3 * 1) + (i * 3 + 0)] = prv.x;
             X[o + (jointsNumber * 3 * 1) + (i * 3 + 1)] = prv.y;
-            X[o + (jointsNumber * 3 * 1) + (i * 3 + 2)] = prv.z;            
+            X[o + (jointsNumber * 3 * 1) + (i * 3 + 2)] = prv.z;
         }
 
         // Trajectory heights
         o += (jointsNumber * 3 * 2);
-        for (int i = 0; i < trajectoryLength; i += 10) {
+        for (int i = 0; i < trajectoryLength; i += 10)
+        {
             Vector3 positionRight = points[i].position + (points[i].rotation * new Vector3(sidePointsOffset, 0.0f, 0.0f));
-            Vector3 positionLeft  = points[i].position + (points[i].rotation * new Vector3(-sidePointsOffset, 0.0f, 0.0f));
+            Vector3 positionLeft = points[i].position + (points[i].rotation * new Vector3(-sidePointsOffset, 0.0f, 0.0f));
 
             X[o + (w * 0) + (i / 10)] = GetHeightSample(positionRight) - rootPosition.y;
             X[o + (w * 1) + (i / 10)] = points[i].position.y - rootPosition.y;
@@ -465,7 +667,8 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
         }
     }
 
-    public void BuildLocalTransforms(Matrix Y) {
+    public void BuildLocalTransforms(Matrix Y)
+    {
 
         Vector3 rootPosition = new Vector3(
             points[trajectoryLength / 2].position.x,
@@ -474,11 +677,12 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
 
         Quaternion rootRotation = points[trajectoryLength / 2].rotation;
 
-        for (int i = 0; i < jointsNumber; i++) {
+        for (int i = 0; i < jointsNumber; i++)
+        {
             int oPosition = 8 + (((trajectoryLength / 2) / 10) * 4) + (jointsNumber * 3 * 0);
             int oVelocity = 8 + (((trajectoryLength / 2) / 10) * 4) + (jointsNumber * 3 * 1);
             int oRotation = 8 + (((trajectoryLength / 2) / 10) * 4) + (jointsNumber * 3 * 2);
-            
+
             Vector3 position = rootRotation
                 * new Vector3(
                 Y[oPosition + i * 3 + 0],
@@ -502,23 +706,55 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
             joints[i].rotation = rotation;
 
             // code goes here (1705 - 1722)
+            // Use to enable xform and global xform
+            /*
+            Matrix4x4 globalXForm = new Matrix4x4();
+            float[][] rotMatrix3x3 = Matrix3x3.QuaternionTo3x3(rotation);
+
+            globalXForm.SetRow(0, new Vector4(rotMatrix3x3[0][0], rotMatrix3x3[1][0], rotMatrix3x3[2][0], joints[i].position.x));
+            globalXForm.SetRow(1, new Vector4(rotMatrix3x3[0][1], rotMatrix3x3[1][1], rotMatrix3x3[2][1], joints[i].position.y));
+            globalXForm.SetRow(2, new Vector4(rotMatrix3x3[0][2], rotMatrix3x3[1][2], rotMatrix3x3[2][2], joints[i].position.z));
+            globalXForm.SetRow(3, new Vector4(0, 0, 0, 1));
+
+            joints[i].globalXForm = globalXForm;
+            */
         }
+
+        /* Convert to local space ... yes I know this is inefficient. */
+        // Use to enable xform and global xform
+        /*
+        for (int i = 0; i < jointsNumber; i++)
+        {
+            if (i == 0)
+            {
+                joints[i].xForm = joints[i].globalXForm;
+            }
+            else
+            {
+                joints[i].xForm = Matrix4x4.Inverse(joints[JointParents[i]].globalXForm) * joints[i].globalXForm;
+            }
+        }
+
+        ForwardKinematics();
+        */
     }
 
-    public void PostVisualisationCalculation(Matrix Y) {
+    public void PostVisualisationCalculation(Matrix Y)
+    {
 
         // Update past trajectory
-        for (int i = 0; i < (trajectoryLength / 2); i++) {
-            points[i].position   = points[i + 1].position;
-            points[i].rotation   = points[i + 1].rotation;
-            points[i].direction  = points[i + 1].direction;
-            points[i].height     = points[i + 1].height;
-            points[i].gaitStand  = points[i + 1].gaitStand;
-            points[i].gaitWalk   = points[i + 1].gaitWalk;
-            points[i].gaitJog    = points[i + 1].gaitJog;
+        for (int i = 0; i < (trajectoryLength / 2); i++)
+        {
+            points[i].position = points[i + 1].position;
+            points[i].rotation = points[i + 1].rotation;
+            points[i].direction = points[i + 1].direction;
+            points[i].height = points[i + 1].height;
+            points[i].gaitStand = points[i + 1].gaitStand;
+            points[i].gaitWalk = points[i + 1].gaitWalk;
+            points[i].gaitJog = points[i + 1].gaitJog;
             points[i].gaitCrouch = points[i + 1].gaitCrouch;
-            points[i].gaitJump   = points[i + 1].gaitJump;
-            points[i].gaitBump   = points[i + 1].gaitBump;
+            points[i].gaitJump = points[i + 1].gaitJump;
+            points[i].gaitBump = points[i + 1].gaitBump;
         }
 
         // Update current trajectory
@@ -526,7 +762,7 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
 
         Vector3 trajectoryUpdate = points[trajectoryLength / 2].rotation * new Vector3(Y[0], 0.0f, Y[1]);
         points[trajectoryLength / 2].position = points[trajectoryLength / 2].position + standAmount * trajectoryUpdate;
-        
+
         points[trajectoryLength / 2].direction = Quaternion.AngleAxis(
             ((standAmount * -Y[2, 0]) * Mathf.Rad2Deg), Vector3.up) * points[trajectoryLength / 2].direction; // new Vector3(0.0f, 1.0f, 0.0f)
 
@@ -535,13 +771,15 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
                 Vector3.up);//new Vector3(0.0f, 1.0f, 0.0f));
 
         // Collide with walls
-        for (int j = 0; j < terrainWalls.Length; j++) {
+        for (int j = 0; j < terrainWalls.Length; j++)
+        {
             Vector2 trajectoryPoint = new Vector2(points[trajectoryLength / 2].position.x * scaleFactor, points[trajectoryLength / 2].position.z * scaleFactor);
             Vector2 segmentPoint = Utils.SegmentNearest(terrainWalls[j].wallStart, terrainWalls[j].wallEnd, trajectoryPoint);
 
             float segmentDistance = (segmentPoint - trajectoryPoint).magnitude;
 
-            if (segmentDistance < (wallWidth + wallVal)) {
+            if (segmentDistance < (wallWidth + wallVal))
+            {
                 Vector2 point0 = (wallWidth + 0.0f) * (trajectoryPoint - segmentPoint).normalized + segmentPoint;
                 Vector2 point1 = (wallWidth + wallVal) * (trajectoryPoint - segmentPoint).normalized + segmentPoint;
                 Vector2 point = Vector2.Lerp(point0, point1, Mathf.Clamp01((segmentDistance - wallWidth) / wallVal));
@@ -553,11 +791,12 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
 
         // Update future trajectory
         int w = (trajectoryLength / 2) / 10;
-        for (int i = ((trajectoryLength / 2) + 1); i < trajectoryLength; i++) {
+        for (int i = ((trajectoryLength / 2) + 1); i < trajectoryLength; i++)
+        {
             float m = ((float)i - (float)(trajectoryLength / 2) / 10.0f) % 1.0f;
 
-            points[i].position.x  = (1 - m) * Y[8 + (w * 0) + (i / 10) - w] + m * Y[8 + (w * 0) + (i / 10) - (w + 1)];
-            points[i].position.z  = (1 - m) * Y[8 + (w * 1) + (i / 10) - w] + m * Y[8 + (w * 1) + (i / 10) - (w + 1)];
+            points[i].position.x = (1 - m) * Y[8 + (w * 0) + (i / 10) - w] + m * Y[8 + (w * 0) + (i / 10) - (w + 1)];
+            points[i].position.z = (1 - m) * Y[8 + (w * 1) + (i / 10) - w] + m * Y[8 + (w * 1) + (i / 10) - (w + 1)];
             points[i].direction.x = (1 - m) * Y[8 + (w * 2) + (i / 10) - w] + m * Y[8 + (w * 2) + (i / 10) - (w + 1)];
             points[i].direction.z = (1 - m) * Y[8 + (w * 3) + (i / 10) - w] + m * Y[8 + (w * 3) + (i / 10) - (w + 1)];
 
@@ -569,33 +808,39 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
         }
     }
 
-    public void UpdatePhase(Matrix Y) {
+    public void UpdatePhase(Matrix Y)
+    {
 
         phase = (phase + ((GetStandAmount() * 0.9f) + 0.1f) * (2.0f * Mathf.PI) * Y[3, 0]) % (2.0f * Mathf.PI);
         //Debug.Log(Phase);
     }
 
-    private float GetStandAmount() {
+    private float GetStandAmount()
+    {
 
         return Mathf.Pow(1.0f - points[trajectoryLength / 2].gaitStand, 0.25f);
     }
 
-    public void DisplayTrajectory() {
+    public void DisplayTrajectory()
+    {
 
         // Middle point
-        for (int i = 0; i < trajectoryLength; i += 10) {
+        for (int i = 0; i < trajectoryLength; i += 10)
+        {
             Vector3 posCenter = -points[i].position;
             posCenter.Scale(new Vector3(scaleFactor, scaleFactor, scaleFactor));
-            
+
             points[i].framePoint.transform.localPosition = -this.transform.position - posCenter;
 
-            if ((i / 10) == 6) {
+            if ((i / 10) == 6)
+            {
                 this.transform.position = -posCenter;
             }
         }
-        
+
         // Left and right point
-        for (int i = 0; i < trajectoryLength; i += 10) {
+        for (int i = 0; i < trajectoryLength; i += 10)
+        {
             // left
             Vector3 posLeft = Vector3.up + (points[i].rotation * new Vector3(-sidePointsOffset * scaleFactor, 0.0f, 0.0f));
             points[i].framePoint.transform.GetChild(0).localPosition = posLeft;
@@ -606,7 +851,8 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
         }
 
         // Direction arrow
-        for (int i = 0; i < trajectoryLength; i += 10) {
+        for (int i = 0; i < trajectoryLength; i += 10)
+        {
             Quaternion angle = Quaternion.AngleAxis(
                 Mathf.Atan2(points[i].direction.x, points[i].direction.z) * Mathf.Rad2Deg,
                 Vector3.up);//new Vector3(0.0f, 1.0f, 0.0f));
@@ -615,27 +861,50 @@ public class CharacterTrajectoryAndAnimScript : MonoBehaviour {
             points[i].framePoint.transform.GetChild(1).localRotation = angle;
         }
     }
-    
-    public void DisplayJoints() {
-        
-        for (int i = 0; i < jointsNumber; i++) {
+
+    public void DisplayJoints()
+    {
+
+        for (int i = 0; i < jointsNumber; i++)
+        {
+
+            string JointName = joints[i].jointName;
             Vector3 position = joints[i].position;
             position.Scale(new Vector3(scaleFactor, scaleFactor, scaleFactor));
             //position.Scale(new Vector3(ScaleFactor, 0.0f, ScaleFactor));
 
-            //Joints[i].jointPoint.transform.localPosition = this.transform.position - position;
+            //joints[i].jointPoint.transform.localPosition = this.transform.position - position;
             joints[i].jointPoint.transform.localPosition = new Vector3(
                 this.transform.position.x - position.x,
-                -(this.transform.position.y - position.y),
+                -(this.transform.position.y - position.y), // because of that weird 180 degree rotation about the vertical axis in the character model?
                 this.transform.position.z - position.z);
-        }        
+
+            Quaternion rotation = joints[i].rotation;
+            //joints[i].jointPoint.transform.rotation = rotation; // put the rotations on the original joint gameobjects - not necessary
+
+            foreach (Transform joint in ImportedJoints)
+            {
+                if (joint.name == JointName)
+                {
+                    if (joint.name == "Hips")
+                    {
+                        Hips.transform.position = position;
+                    }
+                    joint.rotation = rotation;
+                }
+            }
+        }
     }
 
-    public void Crouch() {
+    public void Crouch()
+    {
 
-        if (crouchedTarget == 0.0f) {
+        if (crouchedTarget == 0.0f)
+        {
             crouchedTarget = 1.0f;
-        } else {
+        }
+        else
+        {
             crouchedTarget = 0.0f;
         }
     }
